@@ -1,6 +1,7 @@
 package com.fluxtream.services;
 
 import java.util.List;
+import java.util.Set;
 import java.util.TimeZone;
 
 import com.fluxtream.connectors.google_latitude.LocationFacet;
@@ -48,4 +49,8 @@ public interface MetadataService {
 
     List<WeatherInfo> getWeatherInfo(double latitude, double longitude,
                                      String date, int startMinute, int endMinute);
+
+    /**
+     */
+    public void updateGeolocationInfo(long guestId, Set<String> updatedDates);
 }

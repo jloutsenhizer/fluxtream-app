@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.NavigableSet;
+import java.util.Set;
 import java.util.TimeZone;
 import javax.persistence.EntityManager;
 import javax.persistence.PersistenceContext;
@@ -342,6 +343,113 @@ public class MetadataServiceImpl implements MetadataService {
             addIcons(weather);
         }
         return weather;
+    }
+
+    @Override
+    /**
+     * updateGeolocationInfo notifies the system that timezone information may have changed on certain
+     * days.  This allows a batch upload process to make several updates and then do a single overall
+     * timezone update, since applying the updates incrementally might be more expensive.
+     *
+     *
+     * contextual info table maps date to optional timezone name
+     * - if more than one data point with timezone was recorded for that day, use the most frequently reported
+     *   timezone (the "mode")
+     *
+     * Proposed algorithm:
+     * Input:
+     * Set<String> updatedDates: dates which we have added new timezone information for, and whose consensus timezone
+     *                           might now need to be changed
+     *
+     * Local:
+     * Set<String> needToUpdateDates
+     *
+     * - For each date in dates:
+     *      Calculate timezone from this date by finding the mode of all timezone measurements for this date, and
+     *      compare to what's already in the contextual info table.  If it's the same, continue to the next date.
+     *
+     *      If new timezone doesn't match, write the next value into the contextual info table, and then find other
+     *      dates which might be affected:
+     *
+     *      Search backwards in time through the contextual info table until an earlier date is found that already
+     *      has timezone set ("lastKnownTimezoneDate").  Any dates after "lastKnownTimezoneDate" and up to "date" are
+     *      also affected by the timezone change in date; add these to needToUpdateDates.  Also add two days before this
+     *      range (assing "lastKnownTimezoneDate" and the day before it) and one day after (adding the day after "date").
+     *      This guarantees (a) that we deal correctly with facets whose data started one day before the recorded
+     *      date (e.g. Zeo, which is recorded on the wakeup date rather than the go to sleep date), and (b) that
+     *      any overlap due to moving samples forwards or backwards in time due to changing timezones is handled
+     *      correctly.
+     *
+     * - Convert neetToUpdateDates into one or more ranges of contiguous dates.  For example, Oct/1 Oct/2 Oct/3 Oct/6 Oct/7 Oct/9
+     *   will be converted to [Oct/1 - Oct/3] [Oct/6 - Oct/7] [Oct/9 - Oct/9]
+     *
+     * - For each range:
+     *      - For each connector that has floating facets:
+     *          - For facets from this connector that have a date included in this date range
+     *              - Recompute start and end times for this facet given the new time zone\
+     *          - Compute datastoreTimespan as Java times, from beginning (00:00) of start date to the end of end date (23:59:59.99999),
+     *            using timezones from start and end.  (Note that these timezones have not changed, since we added extra
+     *            unchanged dates on either side of the range in the earlier step)
+     *          - Find all facets from this connector whose start and end times overlap with datastoreTimespan.  Note that this
+     *            can include facets whose "date" isn't inside the date range, since some of the start/end times span a day before
+     *            the facet's "date".
+     *          - Ask datastore to erase data from datastoreTimespan, and to load all facets found from previous step.  This should be done
+     *            atomically with a single call to "import"
+     */
+    @Transactional(readOnly=false)
+    public void updateGeolocationInfo(final long guestId, final Set<String> updatedDates) {
+        List<String> needToUpdateDates = new ArrayList<String>();
+        for (String updatedDate : updatedDates) {
+            // Calculate timezone from this date by finding the mode of all timezone measurements for this date,
+
+            String timezone = findTimezoneMode(updatedDate);
+            DayMetadataFacet dayMetadata = getDayMetadata(guestId, updatedDate, false);
+            // compare to what's already in the contextual info table.
+            if (TimeZone.getTimeZone(dayMetadata.timeZone).equals(TimeZone.getTimeZone(timezone)))
+                //  If it's the same, continue to the next date.
+                continue;
+            else {
+                // If new timezone doesn't match, write the next value into the contextual info table, and then find other
+                // dates which might be affected:
+                dayMetadata.timeZone = timezone;
+                em.persist(dayMetadata);
+                needToUpdateDates.add(updatedDate);
+                // Search backwards in time through the contextual info table until an earlier date is found that already
+                // has timezone set ("lastKnownTimezoneDate").  Any dates after "lastKnownTimezoneDate" and up to "date" are
+                //  also affected by the timezone change in date; add these to needToUpdateDates.
+
+                // *** BEGIN CANDIDE'S QUESTION *** Is it because of the way we fill DayMetadata with existing timezone data in the future if there is no
+                // data available when a user browses to a specific date? If yes, didn’t we decide *not* to write the data
+                // to the database but to just return the next known timezone to the user? *** END CANDIDE'S QUESTION ***
+
+                // Also add two days before this
+                // range (assing "lastKnownTimezoneDate" and the day before it) and one day after (adding the day after "date").
+                // This guarantees (a) that we deal correctly with facets whose data started one day before the recorded
+                // date (e.g. Zeo, which is recorded on the wakeup date rather than the go to sleep date), and (b) that
+                // any overlap due to moving samples forwards or backwards in time due to changing timezones is handled
+                // correctly.
+
+                needToUpdateDates.add(daysBefore(updatedDate, 1));
+                needToUpdateDates.add(daysBefore(updatedDate, 2));
+                needToUpdateDates.add(daysAfter(updatedDate, 1));
+            }
+        }
+        // Convert neetToUpdateDates into one or more ranges of contiguous dates.  For example, Oct/1 Oct/2 Oct/3 Oct/6 Oct/7 Oct/9
+        // will be converted to [Oct/1 - Oct/3] [Oct/6 - Oct/7] [Oct/9 - Oct/9]
+
+        //...
+    }
+
+    private String daysAfter(final String updatedDate, final int i) {
+        return null;
+    }
+
+    private String daysBefore(final String updatedDate, final int i) {
+        return null;
+    }
+
+    private String findTimezoneMode(final String updatedDate) {
+        return null;
     }
 
     @Transactional(readOnly = false)

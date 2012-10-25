@@ -16,6 +16,7 @@ import com.fluxtream.utils.HttpUtils;
 import com.fluxtream.utils.Utils;
 import net.sf.json.JSONArray;
 import net.sf.json.JSONObject;
+import org.apache.log4j.Logger;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
 import org.joda.time.format.DateTimeFormat;
@@ -32,6 +33,8 @@ import org.springframework.stereotype.Component;
 @Updater(prettyName = "Mymee", value = 110, updateStrategyType = Connector.UpdateStrategyType.INCREMENTAL,
          objectTypes = {MymeeObservationFacet.class}, extractor = MymeeObservationFacetExtractor.class)
 public class MymeeUpdater extends AbstractUpdater {
+
+    static Logger logger = Logger.getLogger(MymeeUpdater.class);
 
     @Autowired
     GuestService guestService;
@@ -90,6 +93,11 @@ public class MymeeUpdater extends AbstractUpdater {
     }
 
     public Set<String> extractFacets(final String json, final UpdateInfo updateInfo) throws Exception {
+        StringBuilder sb = new StringBuilder("module=updateQueue component=updater action=extractFacet")
+                .append(" connector=")
+                .append(updateInfo.apiKey.getConnector().toString()).append(" guestId=")
+                .append(updateInfo.apiKey.getGuestId());
+        logger.info(sb.toString());
         JSONObject mymeeData = JSONObject.fromObject(json);
         JSONArray array = mymeeData.getJSONArray("rows");
         Set<String> channelNames = new HashSet<String>();
