@@ -85,6 +85,8 @@ public class LocationFacet extends AbstractFacet implements Comparable<LocationF
     public String date;
 
     public String timezone;
+
+    public int timezoneMinutesOffset;
 	
 	public boolean equals(Object o) {
 		if (!(o instanceof LocationFacet))

@@ -89,9 +89,13 @@ public class GoogleLatitudeUpdater extends AbstractGoogleOAuthUpdater {
                 final City closestCity =
                         metadataService.getClosestCity(locationResource.latitude, locationResource.longitude);
                 locationResource.timezone = closestCity.geo_timezone;
-                TimeZone timeZone = TimeZone.getTimeZone(locationResource.timezone);
-                locationResource.date = format.withZone(DateTimeZone.forTimeZone(timeZone)).print(locationResource.timestampMs);
+                locationResource.timezoneMinutesOffset = ...;
 
+                TimeZone timeZone = TimeZone.getTimeZone(locationResource.timezone);
+                final String updatedDate = format.withZone(DateTimeZone.forTimeZone(timeZone)).print(locationResource.timestampMs);
+                updatedDates.add(updatedDate);
+
+                locationResource.date = updatedDate;
                 locationResource.start = locationResource.timestampMs;
 				locationResource.end = locationResource.timestampMs;
 

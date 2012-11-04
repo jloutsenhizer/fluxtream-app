@@ -414,6 +414,7 @@ public class MetadataServiceImpl implements MetadataService {
                 dayMetadata.timeZone = timezone;
                 em.persist(dayMetadata);
                 needToUpdateDates.add(updatedDate);
+                String lastKnownTimezoneDate = ...;
                 // Search backwards in time through the contextual info table until an earlier date is found that already
                 // has timezone set ("lastKnownTimezoneDate").  Any dates after "lastKnownTimezoneDate" and up to "date" are
                 //  also affected by the timezone change in date; add these to needToUpdateDates.
@@ -429,15 +430,28 @@ public class MetadataServiceImpl implements MetadataService {
                 // any overlap due to moving samples forwards or backwards in time due to changing timezones is handled
                 // correctly.
 
-                needToUpdateDates.add(daysBefore(updatedDate, 1));
-                needToUpdateDates.add(daysBefore(updatedDate, 2));
+                needToUpdateDates.add(daysBefore(lastKnownTimezoneDate, 1));
+                needToUpdateDates.add(daysBefore(lastKnownTimezoneDate, 2));
                 needToUpdateDates.add(daysAfter(updatedDate, 1));
             }
         }
+
         // Convert neetToUpdateDates into one or more ranges of contiguous dates.  For example, Oct/1 Oct/2 Oct/3 Oct/6 Oct/7 Oct/9
         // will be converted to [Oct/1 - Oct/3] [Oct/6 - Oct/7] [Oct/9 - Oct/9]
 
-        //...
+        //* - For each range:
+        //*      - For each connector that has floating facets:
+        //*          - For facets from this connector that have a date included in this date range
+        //*              - Recompute start and end times for this facet given the new time zone\
+        //*          - Compute datastoreTimespan as Java times, from beginning (00:00) of start date to the end of end date (23:59:59.99999),
+        //*            using timezones from start and end.  (Note that these timezones have not changed, since we added extra
+        //*            unchanged dates on either side of the range in the earlier step)
+        //*          - Find all facets from this connector whose start and end times overlap with datastoreTimespan.  Note that this
+        //*            can include facets whose "date" isn't inside the date range, since some of the start/end times span a day before
+        //*            the facet's "date".
+        //*          - Ask datastore to erase data from datastoreTimespan, and to load all facets found from previous step.  This should be done
+        //*            atomically with a single call to "import"
+
     }
 
     private String daysAfter(final String updatedDate, final int i) {
