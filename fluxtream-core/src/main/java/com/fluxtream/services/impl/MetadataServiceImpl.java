@@ -1,6 +1,7 @@
 package com.fluxtream.services.impl;
 
 import java.io.IOException;
+import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
@@ -31,6 +32,7 @@ import com.fluxtream.services.MetadataService;
 import com.fluxtream.services.NotificationsService;
 import com.fluxtream.thirdparty.helpers.WWOHelper;
 import com.fluxtream.utils.JPAUtils;
+import com.fluxtream.utils.Utils;
 import org.apache.commons.httpclient.HttpException;
 import org.apache.log4j.Logger;
 import org.joda.time.MutableDateTime;
@@ -408,6 +410,8 @@ public class MetadataServiceImpl implements MetadataService {
     @Transactional(readOnly=false)
     public void updateGeolocationInfo(final long guestId, final Set<String> updatedDates) {
         List<String> needToUpdateDates = new ArrayList<String>();
+        // this map will contain the resulting date-to-timezone mapping
+        Map<String,String> timezoneDates = new HashMap<String,String>();
         for (String updatedDate : updatedDates) {
             // Calculate timezone from this date by finding the mode of all timezone measurements for this date,
             String timezone = findTimezoneMode(guestId, updatedDate);
@@ -421,48 +425,86 @@ public class MetadataServiceImpl implements MetadataService {
                 // dates which might be affected:
                 dayMetadata.timeZone = timezone;
                 em.persist(dayMetadata);
+                // Search backwards in time through the contextual info table until an earlier date is found that already
+                // has timezone set ("lastKnownTimezoneDate").  Any dates after "lastKnownTimezoneDate" and up to "date" are
+                //  also affected by the timezone change in date; add these to needToUpdateDates.
+                // Also add two days before this
+                // range (assing "lastKnownTimezoneDate" and the day before it) and one day after (adding the day after "date").
+                // This guarantees (a) that we deal correctly with facets whose data started one day before the recorded
+                // date (e.g. Zeo, which is recorded on the wakeup date rather than the go to sleep date), and (b) that
+                // any overlap due to moving samples forwards or backwards in time due to changing timezones is handled
+                // correctly.
                 String lastKnownTimezoneDate = getLastKnownTimezoneDate(guestId, dayMetadata.start);
                 if (lastKnownTimezoneDate!=null) {
                     List<String> daysBetween = daysBetween(lastKnownTimezoneDate, updatedDate);
-                    needToUpdateDates.addAll(daysBefore(lastKnownTimezoneDate, 2));
-                    for (String dayBetween : daysBetween)
+                    for (String dayBetween : daysBetween) {
                         needToUpdateDates.add(dayBetween);
+                        timezoneDates.put(dayBetween, timezone);
+                    }
+                    final List<String> daysBefore = daysBefore(lastKnownTimezoneDate, 2);
+                    for (String dayBefore : daysBefore)
+                        timezoneDates.put(dayBefore, timezone);
+                    needToUpdateDates.addAll(daysBefore);
                 }
-                else
-                    needToUpdateDates.addAll(daysBefore(updatedDate, 2));
+                else {
+                    final List<String> daysBefore = daysBefore(updatedDate, 2);
+                    needToUpdateDates.addAll(daysBefore);
+                    for (String dayBefore : daysBefore)
+                        timezoneDates.put(dayBefore, timezone);
+                }
                 needToUpdateDates.add(updatedDate);
-                needToUpdateDates.addAll(daysAfter(updatedDate, 1));
+                timezoneDates.put(updatedDate, timezone);
+                // also adding one day of padding after -- ANNE: do you agree?
+                final List<String> daysAfter = daysAfter(updatedDate, 1);
+                needToUpdateDates.addAll(daysAfter);
+                timezoneDates.put(daysAfter.get(0), timezone);
             }
         }
 
         final List<List<String>> dateRanges = getDateRanges(needToUpdateDates);
 
+        // For each range:
         for (List<String> dateRange : dateRanges) {
-            //*      - For each connector that has floating facets:
-            //*          - For facets from this connector that have a date included in this date range
+            // For each connector that has floating facets:
             final List<Class<? extends AbstractFloatingTimeZoneFacet>> floatingTimeZoneFacetClasses = Connector.getFloatingTimeZoneFacetClasses();
             for (Class<? extends AbstractFloatingTimeZoneFacet> floatingTimeZoneFacetClass : floatingTimeZoneFacetClasses) {
-                Entity entityAnnotation = floatingTimeZoneFacetClass.getAnnotation(Entity.class);
-                String entityName = entityAnnotation.name();
-                String queryString = new StringBuilder("SELECT facet FROM ").append(entityName).append(" WHERE facet.guestId=? AND facet.date IN ?").toString();
-                final Query query = em.createQuery(queryString);
-                List<AbstractFloatingTimeZoneFacet> facetsToFix = query.getResultList();
-                //...
+                // For facets from this connector that have a date included in this date range
+                List<AbstractFloatingTimeZoneFacet> facetsToFix = findFacetsInRange(guestId, dateRange, floatingTimeZoneFacetClass);
+                for (AbstractFloatingTimeZoneFacet floatingTimeZoneFacet : facetsToFix) {
+                    String timezone = timezoneDates.get(floatingTimeZoneFacet.date);
+                    try {
+                        // Recompute start and end times for this facet given the new time zone
+                        floatingTimeZoneFacet.updateTimeInfo(TimeZone.getTimeZone(timezone));
+                    } catch (ParseException e) {
+                        StringBuilder sb = new StringBuilder("module=updateQueue component=metadataServiceImpl action=updateGeolocationInfo")
+                                .append(" facetClass=").append(floatingTimeZoneFacetClass.getName())
+                                .append(" guestId=").append(guestId)
+                                .append(" message=\"Couldn't update geolocationInfo (parse exception)\"")
+                                .append(" stackTrace=<![CDATA[").append(Utils.stackTrace(e)).append("]]>");
+                        logger.warn(sb.toString());
+                    }
+                }
             }
+            // Compute datastoreTimespan as Java times, from beginning (00:00) of start date to the end of end date (23:59:59.99999),
+            // using timezones from start and end.  (Note that these timezones have not changed, since we added extra
+            // unchanged dates on either side of the range in the earlier step)
+            // Find all facets from this connector whose start and end times overlap with datastoreTimespan.  Note that this
+            // can include facets whose "date" isn't inside the date range, since some of the start/end times span a day before
+            // the facet's "date".
+            // Ask datastore to erase data from datastoreTimespan, and to load all facets found from previous step.  This should be done
+            // atomically with a single call to "import"
         }
-        //* - For each range:
-        //*      - For each connector that has floating facets:
-        //*          - For facets from this connector that have a date included in this date range
-        //*              - Recompute start and end times for this facet given the new time zone\
-        //*          - Compute datastoreTimespan as Java times, from beginning (00:00) of start date to the end of end date (23:59:59.99999),
-        //*            using timezones from start and end.  (Note that these timezones have not changed, since we added extra
-        //*            unchanged dates on either side of the range in the earlier step)
-        //*          - Find all facets from this connector whose start and end times overlap with datastoreTimespan.  Note that this
-        //*            can include facets whose "date" isn't inside the date range, since some of the start/end times span a day before
-        //*            the facet's "date".
-        //*          - Ask datastore to erase data from datastoreTimespan, and to load all facets found from previous step.  This should be done
-        //*            atomically with a single call to "import"
 
+    }
+
+    private List<AbstractFloatingTimeZoneFacet> findFacetsInRange(final long guestId, final List<String> dateRange, final Class<? extends AbstractFloatingTimeZoneFacet> floatingTimeZoneFacetClass) {
+        Entity entityAnnotation = floatingTimeZoneFacetClass.getAnnotation(Entity.class);
+        String entityName = entityAnnotation.name();
+        String queryString = new StringBuilder("SELECT facet FROM ").append(entityName).append(" WHERE facet.guestId=? AND facet.date IN ?").toString();
+        final Query query = em.createQuery(queryString);
+        query.setParameter(1, guestId);
+        query.setParameter(2, dateRange);
+        return query.getResultList();
     }
 
     /**
