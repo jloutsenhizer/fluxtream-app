@@ -6,6 +6,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
 import com.fluxtream.connectors.annotations.JsonFacetCollection;
 import com.fluxtream.connectors.annotations.ObjectTypeSpec;
@@ -14,6 +15,7 @@ import com.fluxtream.connectors.dao.FacetDao;
 import com.fluxtream.connectors.updaters.AbstractUpdater;
 import com.fluxtream.connectors.vos.AbstractFacetVOCollection;
 import com.fluxtream.domain.AbstractFacet;
+import com.fluxtream.domain.AbstractFloatingTimeZoneFacet;
 import com.fluxtream.domain.AbstractUserProfile;
 import com.fluxtream.facets.extractors.AbstractFacetExtractor;
 import org.apache.velocity.util.StringUtils;
@@ -26,9 +28,29 @@ import org.springframework.stereotype.Component;
 @Component
 public class Connector {
 
+    UpdateStrategyType updateStrategyType = UpdateStrategyType.INCREMENTAL;
+
     private static Map<String, Connector> connectors = new ConcurrentHashMap<String, Connector>();
     private static Map<Integer, Connector> connectorsByValue = new ConcurrentHashMap<Integer, Connector>();
+    private Class<? extends AbstractFacetExtractor> extractorClass;
+    private Map<Integer, Class<? extends AbstractFacetExtractor>> objectTypeExtractorClasses;
+    private Class<? extends AbstractUserProfile> userProfileClass;
+    private ObjectType[] objectTypes;
+    private Class<? extends AbstractFacet> facetClass;
+    private int value;
+    private String name;
+    private String prettyName;
+    private int[] objectTypeValues;
+    private boolean hasFacets;
+    private String[] defaultChannels;
+    private String[] additionalParameters;
+    private boolean manageable;
+    private static List<Class<? extends AbstractFloatingTimeZoneFacet>> floatingTimeZoneFacetClasses =
+            new Vector<Class<? extends AbstractFloatingTimeZoneFacet>>();
 
+    public static List<Class<? extends AbstractFloatingTimeZoneFacet>> getFloatingTimeZoneFacetClasses() {
+        return floatingTimeZoneFacetClasses;
+    }
 
     static {
         Connector flxConnector = new Connector();
@@ -141,6 +163,10 @@ public class Connector {
         // set connectors' object types
         Class<? extends AbstractFacet>[] facetTypes = updaterAnnotation
                 .objectTypes();
+        for (Class<? extends AbstractFacet> facetType : facetTypes) {
+            if (AbstractFloatingTimeZoneFacet.class.isAssignableFrom(facetType))
+                floatingTimeZoneFacetClasses.add((Class<? extends AbstractFloatingTimeZoneFacet>)facetType);
+        }
         if (updaterAnnotation.extractor() != AbstractFacetExtractor.class)
             connector.extractorClass = updaterAnnotation.extractor();
         if (facetTypes.length == 1) {
@@ -250,22 +276,6 @@ public class Connector {
     public enum UpdateStrategyType {
         ALWAYS_UPDATE, INCREMENTAL, PUSH
     }
-
-    UpdateStrategyType updateStrategyType = UpdateStrategyType.INCREMENTAL;
-
-    private Class<? extends AbstractFacetExtractor> extractorClass;
-    private Map<Integer, Class<? extends AbstractFacetExtractor>> objectTypeExtractorClasses;
-    private Class<? extends AbstractUserProfile> userProfileClass;
-    private ObjectType[] objectTypes;
-    private Class<? extends AbstractFacet> facetClass;
-    private int value;
-    private String name;
-    private String prettyName;
-    private int[] objectTypeValues;
-    private boolean hasFacets;
-    private String[] defaultChannels;
-    private String[] additionalParameters;
-    private boolean manageable;
 
     public boolean isManageable(){
         return manageable;

@@ -35,7 +35,7 @@ public class JPADaoServiceImpl implements JPADaoService {
 		return JPAUtils.findUnique(em, clazz, queryName, params);
 	}
 
-	@Override
+    @Override
 	public <T> List<T> findWithLimit(String queryName, Class<T> clazz, int firstResult, int maxResults, Object... params) {
 		return JPAUtils.find(em, clazz, queryName, firstResult, maxResults,
 				params);

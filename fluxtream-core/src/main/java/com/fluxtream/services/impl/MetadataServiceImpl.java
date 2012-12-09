@@ -5,29 +5,35 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
 import java.util.Set;
 import java.util.TimeZone;
+import javax.persistence.Entity;
 import javax.persistence.EntityManager;
 import javax.persistence.PersistenceContext;
 import javax.persistence.Query;
 import com.fluxtream.Configuration;
+import com.fluxtream.connectors.Connector;
 import com.fluxtream.connectors.google_latitude.LocationFacet;
 import com.fluxtream.connectors.vos.AbstractFacetVO;
+import com.fluxtream.domain.AbstractFloatingTimeZoneFacet;
 import com.fluxtream.domain.metadata.City;
 import com.fluxtream.domain.metadata.DayMetadataFacet;
 import com.fluxtream.domain.metadata.DayMetadataFacet.TravelType;
 import com.fluxtream.domain.metadata.DayMetadataFacet.VisitedCity;
 import com.fluxtream.domain.metadata.WeatherInfo;
 import com.fluxtream.services.GuestService;
+import com.fluxtream.services.JPADaoService;
 import com.fluxtream.services.MetadataService;
 import com.fluxtream.services.NotificationsService;
 import com.fluxtream.thirdparty.helpers.WWOHelper;
 import com.fluxtream.utils.JPAUtils;
 import org.apache.commons.httpclient.HttpException;
 import org.apache.log4j.Logger;
+import org.joda.time.MutableDateTime;
 import org.joda.time.format.DateTimeFormat;
 import org.joda.time.format.DateTimeFormatter;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -419,8 +425,8 @@ public class MetadataServiceImpl implements MetadataService {
                 if (lastKnownTimezoneDate!=null) {
                     List<String> daysBetween = daysBetween(lastKnownTimezoneDate, updatedDate);
                     needToUpdateDates.addAll(daysBefore(lastKnownTimezoneDate, 2));
-                    for (String s : daysBetween)
-                        needToUpdateDates.add(s);
+                    for (String dayBetween : daysBetween)
+                        needToUpdateDates.add(dayBetween);
                 }
                 else
                     needToUpdateDates.addAll(daysBefore(updatedDate, 2));
@@ -432,7 +438,17 @@ public class MetadataServiceImpl implements MetadataService {
         final List<List<String>> dateRanges = getDateRanges(needToUpdateDates);
 
         for (List<String> dateRange : dateRanges) {
-
+            //*      - For each connector that has floating facets:
+            //*          - For facets from this connector that have a date included in this date range
+            final List<Class<? extends AbstractFloatingTimeZoneFacet>> floatingTimeZoneFacetClasses = Connector.getFloatingTimeZoneFacetClasses();
+            for (Class<? extends AbstractFloatingTimeZoneFacet> floatingTimeZoneFacetClass : floatingTimeZoneFacetClasses) {
+                Entity entityAnnotation = floatingTimeZoneFacetClass.getAnnotation(Entity.class);
+                String entityName = entityAnnotation.name();
+                String queryString = new StringBuilder("SELECT facet FROM ").append(entityName).append(" WHERE facet.guestId=? AND facet.date IN ?").toString();
+                final Query query = em.createQuery(queryString);
+                List<AbstractFloatingTimeZoneFacet> facetsToFix = query.getResultList();
+                //...
+            }
         }
         //* - For each range:
         //*      - For each connector that has floating facets:
@@ -452,25 +468,52 @@ public class MetadataServiceImpl implements MetadataService {
     /**
      * Convert dates into one or more ranges of contiguous dates.  For example, Oct/1 Oct/2 Oct/3 Oct/6 Oct/7 Oct/9
      * will be converted to [Oct/1 - Oct/3] [Oct/6 - Oct/7] [Oct/9 - Oct/9]
-     * assuming dates are sorted in growing order
+     * This method assumes dates are sorted in growing order
      * @param dates
      * @return
      */
     List<List<String>> getDateRanges(final List<String> dates) {
-        List<List<String>> dateRanges = new ArrayList<List<String>>();
-        List<String> dateRange = new ArrayList<String>();
-        for (String date : dates) {
-
+        final List<List<String>> dateRanges = new ArrayList<List<String>>();
+        if (dates.size()==0) return dateRanges;
+        final Iterator<String> eachDate = dates.iterator();
+        final String firstDate = eachDate.next();
+        MutableDateTime startDateTime = formatter.parseMutableDateTime(firstDate);
+        final MutableDateTime endDateTime = formatter.parseMutableDateTime(dates.get(dates.size() - 1));
+        List<String> dateRange = addDateRangeWithDate(dateRanges, firstDate);
+        while(startDateTime.isBefore(endDateTime)&&eachDate.hasNext()) {
+            startDateTime.addDays(1);
+            final String nextDate = eachDate.next();
+            final String nextDateInRange = formatter.print(startDateTime);
+            if (nextDateInRange.equals(nextDate))
+                dateRange.add(nextDate);
+            else {
+                dateRange = addDateRangeWithDate(dateRanges, nextDate);
+                startDateTime = formatter.parseMutableDateTime(nextDate);
+            }
         }
         return dateRanges;
     }
 
+    private List<String> addDateRangeWithDate(final List<List<String>> dateRanges, final String date) {
+        List<String> dateRange = new ArrayList<String>();
+        dateRange.add(date);
+        dateRanges.add(dateRange);
+        return dateRange;
+    }
+
     List<String> daysBetween(final String startDate, final String endDate) {
-        long startTs = formatter.parseMillis(startDate);
-        final long endTs = formatter.parseMillis(endDate);
         List<String> daysBetween = new ArrayList<String>();
-        for (; startTs<endTs; startTs += 24*3600000)
-            daysBetween.add(formatter.print(startTs));
+        final MutableDateTime startDateTime = formatter.parseMutableDateTime(startDate);
+        final MutableDateTime endDateTime = formatter.parseMutableDateTime(startDate);
+        if (startDateTime.isAfter(endDateTime.toInstant()))
+            return daysBetween;
+        while(true) {
+            startDateTime.addDays(1);
+            final String dayBetween = formatter.print(startDateTime);
+            if (!dayBetween.equals(endDate))
+                daysBetween.add(dayBetween);
+            else break;
+        }
         return daysBetween;
     }
 
@@ -482,18 +525,25 @@ public class MetadataServiceImpl implements MetadataService {
     }
 
     List<String> daysAfter(final String date, final int days) {
-        final long then = formatter.parseMillis(date);
+        final MutableDateTime startDateTime = formatter.parseMutableDateTime(date);
         List<String> daysAfter = new ArrayList<String>();
-        for (int i=0; i<days; i++)
-            daysAfter.add(formatter.print(then+i*24*3600000));
+        for (int i=0; i<days; i++) {
+            startDateTime.addDays(1);
+            final String dayAfter = formatter.print(startDateTime);
+            daysAfter.add(dayAfter);
+        }
         return daysAfter;
     }
 
     List<String> daysBefore(final String date, final int days) {
-        final long then = formatter.parseMillis(date);
+        final MutableDateTime startDateTime = formatter.parseMutableDateTime(date);
         List<String> daysBefore = new ArrayList<String>();
-        for (int i=0; i<days; i++)
-            daysBefore.add(formatter.print(then-i*24*3600000));
+        for (int i=0; i<days; i++) {
+            startDateTime.addDays(-1);
+            final String dayAfter = formatter.print(startDateTime);
+            daysBefore.add(dayAfter);
+        }
+        Collections.reverse(daysBefore);
         return daysBefore;
     }
 
