@@ -2,8 +2,11 @@ package com.fluxtream.services.impl;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.NavigableSet;
 import java.util.Set;
 import java.util.TimeZone;
@@ -393,16 +396,15 @@ public class MetadataServiceImpl implements MetadataService {
      *          - Find all facets from this connector whose start and end times overlap with datastoreTimespan.  Note that this
      *            can include facets whose "date" isn't inside the date range, since some of the start/end times span a day before
      *            the facet's "date".
-     *          - Ask datastore to erase data from datastoreTimespan, and to load all facets found from previous step.  This should be done
-     *            atomically with a single call to "import"
+     *          - Ask datastore to erase data from datastoreTimespan, and to load all facets found from previous step.
+     *            This should be done atomically with a single call to "import"
      */
     @Transactional(readOnly=false)
     public void updateGeolocationInfo(final long guestId, final Set<String> updatedDates) {
         List<String> needToUpdateDates = new ArrayList<String>();
         for (String updatedDate : updatedDates) {
             // Calculate timezone from this date by finding the mode of all timezone measurements for this date,
-
-            String timezone = findTimezoneMode(updatedDate);
+            String timezone = findTimezoneMode(guestId, updatedDate);
             DayMetadataFacet dayMetadata = getDayMetadata(guestId, updatedDate, false);
             // compare to what's already in the contextual info table.
             if (TimeZone.getTimeZone(dayMetadata.timeZone).equals(TimeZone.getTimeZone(timezone)))
@@ -413,32 +415,25 @@ public class MetadataServiceImpl implements MetadataService {
                 // dates which might be affected:
                 dayMetadata.timeZone = timezone;
                 em.persist(dayMetadata);
+                String lastKnownTimezoneDate = getLastKnownTimezoneDate(guestId, dayMetadata.start);
+                if (lastKnownTimezoneDate!=null) {
+                    List<String> daysBetween = daysBetween(lastKnownTimezoneDate, updatedDate);
+                    needToUpdateDates.addAll(daysBefore(lastKnownTimezoneDate, 2));
+                    for (String s : daysBetween)
+                        needToUpdateDates.add(s);
+                }
+                else
+                    needToUpdateDates.addAll(daysBefore(updatedDate, 2));
                 needToUpdateDates.add(updatedDate);
-                String lastKnownTimezoneDate = ...;
-                // Search backwards in time through the contextual info table until an earlier date is found that already
-                // has timezone set ("lastKnownTimezoneDate").  Any dates after "lastKnownTimezoneDate" and up to "date" are
-                //  also affected by the timezone change in date; add these to needToUpdateDates.
-
-                // *** BEGIN CANDIDE'S QUESTION *** Is it because of the way we fill DayMetadata with existing timezone data in the future if there is no
-                // data available when a user browses to a specific date? If yes, didn’t we decide *not* to write the data
-                // to the database but to just return the next known timezone to the user? *** END CANDIDE'S QUESTION ***
-
-                // Also add two days before this
-                // range (assing "lastKnownTimezoneDate" and the day before it) and one day after (adding the day after "date").
-                // This guarantees (a) that we deal correctly with facets whose data started one day before the recorded
-                // date (e.g. Zeo, which is recorded on the wakeup date rather than the go to sleep date), and (b) that
-                // any overlap due to moving samples forwards or backwards in time due to changing timezones is handled
-                // correctly.
-
-                needToUpdateDates.add(daysBefore(lastKnownTimezoneDate, 1));
-                needToUpdateDates.add(daysBefore(lastKnownTimezoneDate, 2));
-                needToUpdateDates.add(daysAfter(updatedDate, 1));
+                needToUpdateDates.addAll(daysAfter(updatedDate, 1));
             }
         }
 
-        // Convert neetToUpdateDates into one or more ranges of contiguous dates.  For example, Oct/1 Oct/2 Oct/3 Oct/6 Oct/7 Oct/9
-        // will be converted to [Oct/1 - Oct/3] [Oct/6 - Oct/7] [Oct/9 - Oct/9]
+        final List<List<String>> dateRanges = getDateRanges(needToUpdateDates);
 
+        for (List<String> dateRange : dateRanges) {
+
+        }
         //* - For each range:
         //*      - For each connector that has floating facets:
         //*          - For facets from this connector that have a date included in this date range
@@ -454,16 +449,70 @@ public class MetadataServiceImpl implements MetadataService {
 
     }
 
-    private String daysAfter(final String updatedDate, final int i) {
-        return null;
+    /**
+     * Convert dates into one or more ranges of contiguous dates.  For example, Oct/1 Oct/2 Oct/3 Oct/6 Oct/7 Oct/9
+     * will be converted to [Oct/1 - Oct/3] [Oct/6 - Oct/7] [Oct/9 - Oct/9]
+     * assuming dates are sorted in growing order
+     * @param dates
+     * @return
+     */
+    List<List<String>> getDateRanges(final List<String> dates) {
+        List<List<String>> dateRanges = new ArrayList<List<String>>();
+        List<String> dateRange = new ArrayList<String>();
+        for (String date : dates) {
+
+        }
+        return dateRanges;
     }
 
-    private String daysBefore(final String updatedDate, final int i) {
-        return null;
+    List<String> daysBetween(final String startDate, final String endDate) {
+        long startTs = formatter.parseMillis(startDate);
+        final long endTs = formatter.parseMillis(endDate);
+        List<String> daysBetween = new ArrayList<String>();
+        for (; startTs<endTs; startTs += 24*3600000)
+            daysBetween.add(formatter.print(startTs));
+        return daysBetween;
     }
 
-    private String findTimezoneMode(final String updatedDate) {
-        return null;
+    private String getLastKnownTimezoneDate(final long guestId, long ts) {
+        final DayMetadataFacet dayMetadataFacet = JPAUtils.findUnique(em, DayMetadataFacet.class, "context.day.before", guestId, ts);
+        if (dayMetadataFacet!=null)
+            return dayMetadataFacet.date;
+        else return null;
+    }
+
+    List<String> daysAfter(final String date, final int days) {
+        final long then = formatter.parseMillis(date);
+        List<String> daysAfter = new ArrayList<String>();
+        for (int i=0; i<days; i++)
+            daysAfter.add(formatter.print(then+i*24*3600000));
+        return daysAfter;
+    }
+
+    List<String> daysBefore(final String date, final int days) {
+        final long then = formatter.parseMillis(date);
+        List<String> daysBefore = new ArrayList<String>();
+        for (int i=0; i<days; i++)
+            daysBefore.add(formatter.print(then-i*24*3600000));
+        return daysBefore;
+    }
+
+    private String findTimezoneMode(final long guestId, final String date) {
+        final List<LocationFacet> facets = JPAUtils.find(em, LocationFacet.class, "google_latitude.location.byDate", guestId, date);
+        Map<String, Integer> timezoneCounts = new HashMap<String,Integer>();
+        for (LocationFacet locationFacet : facets) {
+            if (locationFacet.timezone!=null) {
+                final Integer previousCount = timezoneCounts.get(locationFacet.timezone);
+                int count = previousCount==null?1:previousCount+1;
+                timezoneCounts.put(locationFacet.timezone, count);
+            }
+        }
+        int max = Collections.max(timezoneCounts.values());
+        for (String tz : timezoneCounts.keySet()) {
+            if (timezoneCounts.get(tz)==max)
+                return tz;
+        }
+        throw new RuntimeException("Couldn't find timezone for date " + date + ", guestId=guestId");
     }
 
     @Transactional(readOnly = false)

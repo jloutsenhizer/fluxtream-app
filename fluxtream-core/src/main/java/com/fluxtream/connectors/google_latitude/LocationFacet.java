@@ -30,6 +30,9 @@ import com.google.api.client.util.Key;
 		@NamedQuery(name = "google_latitude.location.deleteAll", query = "DELETE FROM " +
 				"Facet_GoogleLatitudeLocation facet WHERE " +
 				"facet.source=2 AND facet.guestId=?"),
+        @NamedQuery(name = "google_latitude.location.byDate", query = "SELECT facet FROM " +
+                                                                       "Facet_GoogleLatitudeLocation facet WHERE " +
+                                                                       "facet.guestId=? AND facet.date=?"),
 		@NamedQuery(name = "google_latitude.location.between", query = "SELECT facet FROM " +
 				"Facet_GoogleLatitudeLocation facet WHERE " +
 				"facet.guestId=? AND facet.timestampMs>=? AND " +
