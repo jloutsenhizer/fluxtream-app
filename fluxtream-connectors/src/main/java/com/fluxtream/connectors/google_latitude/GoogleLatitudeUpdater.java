@@ -65,9 +65,11 @@ public class GoogleLatitudeUpdater extends AbstractGoogleOAuthUpdater {
 		ApiUpdate lastSuccessfulUpdate = connectorUpdateService
 				.getLastSuccessfulUpdate(updateInfo.apiKey.getGuestId(),
 						connector());
+        final long from = (lastSuccessfulUpdate == null) ? 0 : lastSuccessfulUpdate.ts;
+
         // accumulate dates affected by this import
         Set<String> updatedDates = new HashSet<String>();
-		loadHistory(updateInfo, lastSuccessfulUpdate.ts,
+		loadHistory(updateInfo, from,
 				System.currentTimeMillis(), updatedDates);
         // call metadataService method to update geolocation info for these dates
         metadataService.updateGeolocationInfo(updateInfo.getGuestId(), updatedDates);
@@ -91,7 +93,7 @@ public class GoogleLatitudeUpdater extends AbstractGoogleOAuthUpdater {
                 locationResource.timezone = closestCity.geo_timezone;
                 TimeZone timeZone = TimeZone.getTimeZone(closestCity.geo_timezone);
                 if (timeZone!=null)
-                    locationResource.timezoneMinutesOffset = timeZone.getOffset(locationResource.timestampMs);
+                    locationResource.timezoneMinutesOffset = timeZone.getOffset(locationResource.timestampMs)/60000;
 
                 final String updatedDate = format.withZone(DateTimeZone.forTimeZone(timeZone)).print(locationResource.timestampMs);
                 updatedDates.add(updatedDate);
