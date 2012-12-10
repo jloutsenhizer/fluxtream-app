@@ -273,8 +273,24 @@ public class Connector {
         return splits[splits.length-2];
     }
 
+    public Class<? extends AbstractUpdater> getUpdaterClass() {
+        return updaterClass;
+    }
+
     public enum UpdateStrategyType {
-        ALWAYS_UPDATE, INCREMENTAL, PUSH
+        ALWAYS_UPDATE, INCREMENTAL
+    }
+
+    private Class<? extends AbstractUpdater> updaterClass;
+    private AbstractUpdater updater;
+
+    public boolean isAutonomous() {
+        final Class<?>[] interfaces = this.updaterClass.getInterfaces();
+        for (Class<?> anInterface : interfaces) {
+            if (anInterface==Autonomous.class)
+                return true;
+        }
+        return false;
     }
 
     public boolean isManageable(){
