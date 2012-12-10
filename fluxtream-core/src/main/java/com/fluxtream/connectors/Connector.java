@@ -150,8 +150,8 @@ public class Connector {
         String beanClassName = bd.getBeanClassName();
         String connectorName = getConnectorName(beanClassName);
         Connector connector = new Connector();
-        Class<? extends AbstractUpdater> updaterClass = getUpdaterClass(beanClassName);
-        Updater updaterAnnotation = updaterClass
+        connector.updaterClass = getUpdaterClass(beanClassName);
+        Updater updaterAnnotation = connector.updaterClass
                 .getAnnotation(Updater.class);
         // set connectors' pretty name
         connector.manageable = updaterAnnotation.isManageable();
@@ -209,7 +209,7 @@ public class Connector {
         if (connectorObjectTypes.size()>0)
             connector.objectTypes = connectorObjectTypes.toArray(new ObjectType[0]);
 
-        JsonFacetCollection jsonFacetAnnotation = updaterClass
+        JsonFacetCollection jsonFacetAnnotation = connector.updaterClass
                 .getAnnotation(JsonFacetCollection.class);
         if (jsonFacetAnnotation != null)
             connector.jsonFacetCollectionClasses.put(
