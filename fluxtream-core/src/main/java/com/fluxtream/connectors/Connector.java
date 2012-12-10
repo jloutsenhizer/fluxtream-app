@@ -285,6 +285,10 @@ public class Connector {
     private AbstractUpdater updater;
 
     public boolean isAutonomous() {
+        if(this.updaterClass==null) {
+            throw new RuntimeException("Could not get Updater Class for ["
+                                                   + name + "]");
+        }
         final Class<?>[] interfaces = this.updaterClass.getInterfaces();
         for (Class<?> anInterface : interfaces) {
             if (anInterface==Autonomous.class)
