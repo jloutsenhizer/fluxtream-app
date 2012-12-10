@@ -39,7 +39,9 @@ public class GithubUpdater extends AbstractUpdater {
     @Override
     public void updateConnectorData(UpdateInfo updateInfo) throws Exception {
         ApiUpdate lastUpdate = connectorUpdateService.getLastSuccessfulUpdate(updateInfo.apiKey.getGuestId(), connector());
-        loadHistory(updateInfo, lastUpdate.ts, System.currentTimeMillis());
+        final long from = (lastUpdate == null) ? 0 : lastUpdate.ts;
+
+        loadHistory(updateInfo, from, System.currentTimeMillis());
     }
 
     private void loadHistory(UpdateInfo updateInfo, long from, long to) throws Exception {

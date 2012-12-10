@@ -85,9 +85,11 @@ public class FlickrUpdater extends AbstractUpdater {
 		ApiUpdate lastSuccessfulUpdate = connectorUpdateService
 				.getLastSuccessfulUpdate(updateInfo.apiKey.getGuestId(),
 						connector());
+        final long from = (lastSuccessfulUpdate == null) ? 0 : lastSuccessfulUpdate.ts;
+
 		for (int page = 0; retrievedItems == ITEMS_PER_PAGE; page++) {
 			JSONObject feed = retrievePhotoHistory(updateInfo,
-					lastSuccessfulUpdate.ts, System.currentTimeMillis(), page);
+					from, System.currentTimeMillis(), page);
 			JSONObject photosWrapper = feed.getJSONObject("photos");
 
 			if (photosWrapper != null) {

@@ -85,7 +85,8 @@ public class SmsBackupUpdater extends AbstractUpdater {
 			ApiUpdate lastSuccessfulUpdate = connectorUpdateService
 					.getLastSuccessfulUpdate(updateInfo.apiKey.getGuestId(),
 							connector(), callLogObjectType.value());
-			Date since = new Date(lastSuccessfulUpdate.ts);
+            final long from = (lastSuccessfulUpdate == null) ? 0 : lastSuccessfulUpdate.ts;
+			Date since = new Date(from);
 			retrieveCallLogSinceDate(updateInfo, email, password, since);
 		}
 
@@ -94,7 +95,8 @@ public class SmsBackupUpdater extends AbstractUpdater {
 			ApiUpdate lastSuccessfulUpdate = connectorUpdateService
 					.getLastSuccessfulUpdate(updateInfo.apiKey.getGuestId(),
 							connector(), smsObjectType.value());
-			Date since = new Date(lastSuccessfulUpdate.ts);
+            final long from = (lastSuccessfulUpdate == null) ? 0 : lastSuccessfulUpdate.ts;
+			Date since = new Date(from);
 			retrieveSmsEntriesSince(updateInfo, email, password, since);
 		}
 	}

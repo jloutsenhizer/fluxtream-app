@@ -56,12 +56,13 @@ public class WithingsUpdater extends AbstractUpdater {
 		ApiUpdate lastSuccessfulUpdate = connectorUpdateService
 				.getLastSuccessfulUpdate(updateInfo.apiKey.getGuestId(),
 						connector());
+        final long from = (lastSuccessfulUpdate == null) ? 0 : lastSuccessfulUpdate.ts;
 
 		String url = "http://wbsapi.withings.net/measure?action=getmeas";
 		url += "&userid=" + updateInfo.apiKey.getAttributeValue("userid", env);
 		url += "&publickey="
 				+ updateInfo.apiKey.getAttributeValue("publickey", env);
-		url += "&startdate=" + lastSuccessfulUpdate.ts / 1000;
+		url += "&startdate=" + from / 1000;
 		url += "&enddate=" + System.currentTimeMillis() / 1000;
 		
 		try {
