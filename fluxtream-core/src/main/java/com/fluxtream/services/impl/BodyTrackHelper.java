@@ -56,6 +56,9 @@ public class BodyTrackHelper {
     @Autowired
     PhotoService photoService;
 
+    @Autowired
+    JPADaoServiceImpl jpaDaoService;
+
     Gson gson = new Gson();
 
     private DataStoreExecutionResult executeDataStore(String commandName, Object[] parameters){
@@ -169,6 +172,16 @@ public class BodyTrackHelper {
         try{
             if (uid == null)
                 throw new IllegalArgumentException();
+
+            // well I don't know where to get the date from, but the idea is we get the data from the database and
+            // format it in the expected json tile format...
+            // the query would be based on a list of dates (an SQL IN query)...
+            if (deviceNickname.equals("fitbit")) {
+
+            } else if (deviceNickname.equals("zeo")) {
+
+            }
+
             final DataStoreExecutionResult dataStoreExecutionResult = executeDataStore("gettile", new Object[]{uid, deviceNickname + "." + channelName, level, offset});
             String result = dataStoreExecutionResult.getResponse();
 
