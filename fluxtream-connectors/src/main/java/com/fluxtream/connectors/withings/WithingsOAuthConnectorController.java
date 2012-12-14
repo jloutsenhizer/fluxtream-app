@@ -20,6 +20,7 @@ import oauth.signpost.exception.OAuthCommunicationException;
 import oauth.signpost.exception.OAuthExpectationFailedException;
 import oauth.signpost.exception.OAuthMessageSignerException;
 import oauth.signpost.exception.OAuthNotAuthorizedException;
+import oauth.signpost.http.HttpParameters;
 import org.apache.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
@@ -83,10 +84,13 @@ public class WithingsOAuthConnectorController {
 
         OAuthConsumer consumer = (OAuthConsumer) request.getSession()
                 .getAttribute(WITHINGS_OAUTH_CONSUMER);
+        HttpParameters additionalParameter = new HttpParameters();
+        additionalParameter.put("userid", userid);
+        consumer.setAdditionalParameters(additionalParameter);
+
         OAuthProvider provider = (OAuthProvider) request.getSession()
                 .getAttribute(WITHINGS_OAUTH_PROVIDER);
-        String verifier = request.getParameter("oauth_verifier");
-        provider.retrieveAccessToken(consumer, verifier);
+        provider.retrieveAccessToken(consumer, null);
         Guest guest = AuthHelper.getGuest();
 
         Connector connector = Connector.getConnector("withings");
