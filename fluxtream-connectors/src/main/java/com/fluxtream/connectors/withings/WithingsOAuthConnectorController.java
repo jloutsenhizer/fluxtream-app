@@ -1,10 +1,8 @@
 package com.fluxtream.connectors.withings;
 
 import java.io.IOException;
-import java.util.Map;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
 import com.fluxtream.Configuration;
 import com.fluxtream.auth.AuthHelper;
 import com.fluxtream.connectors.Connector;
@@ -51,8 +49,7 @@ public class WithingsOAuthConnectorController {
     private static final String WITHINGS_OAUTH_PROVIDER = "withingsOAuthProvider";
 
     @RequestMapping(value = "/token")
-    public String getToken(HttpServletRequest request,
-                           HttpServletResponse response) throws IOException, ServletException, OAuthMessageSignerException, OAuthNotAuthorizedException, OAuthExpectationFailedException, OAuthCommunicationException {
+    public String getToken(HttpServletRequest request) throws IOException, ServletException, OAuthMessageSignerException, OAuthNotAuthorizedException, OAuthExpectationFailedException, OAuthCommunicationException {
 
         String oauthCallback = env.get("homeBaseUrl") + "withings/upgradeToken";
         if (request.getParameter("guestId") != null)
@@ -80,17 +77,19 @@ public class WithingsOAuthConnectorController {
 
     @RequestMapping(value = "/upgradeToken")
     public String upgradeToken(HttpServletRequest request) throws Exception {
-        String userid = request.getParameter("userid");
-
         OAuthConsumer consumer = (OAuthConsumer) request.getSession()
                 .getAttribute(WITHINGS_OAUTH_CONSUMER);
+
         HttpParameters additionalParameter = new HttpParameters();
+        String userid = request.getParameter("userid");
         additionalParameter.put("userid", userid);
         consumer.setAdditionalParameters(additionalParameter);
 
         OAuthProvider provider = (OAuthProvider) request.getSession()
                 .getAttribute(WITHINGS_OAUTH_PROVIDER);
-        provider.retrieveAccessToken(consumer, null);
+        String verifier = request.getParameter("oauth_verifier");
+        provider.retrieveAccessToken(consumer, verifier);
+
         Guest guest = AuthHelper.getGuest();
 
         Connector connector = Connector.getConnector("withings");
