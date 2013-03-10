@@ -267,8 +267,9 @@ public class BodyTrackController {
                             try {
                                 final FluxtreamCapturePhotoStore.OperationResult<FluxtreamCapturePhoto> result = fluxtreamCapturePhotoStore.saveOrUpdatePhoto(guestId, photoBytes, jsonMetadata);
                                 final String photoStoreKey = result.getData().getPhotoStoreKey();
+                                final Long databaseRecordId = result.getDatabaseRecordId();
                                 LOG.info("BodyTrackController.handlePhotoUpload(): photo [" + photoStoreKey + "] " + result.getOperation() + " sucessfully!");
-                                response = jsonResponseHelper.ok("photo " + result.getOperation() + " sucessfully!", new PhotoUploadPayload(result.getOperation(), photoStoreKey));
+                                response = jsonResponseHelper.ok("photo " + result.getOperation() + " sucessfully!", new PhotoUploadResponsePayload(result.getOperation(), databaseRecordId, photoStoreKey));
                             }
                             catch (FluxtreamCapturePhotoStore.UnsupportedImageFormatException e) {
                                 final String message = "UnsupportedImageFormatException while trying to save the photo";
@@ -827,7 +828,7 @@ public class BodyTrackController {
         }
     }
 
-    private class PhotoUploadPayload {
+    private class PhotoUploadResponsePayload {
         @NotNull
         @Expose
         private final String operation;
@@ -836,7 +837,12 @@ public class BodyTrackController {
         @Expose
         private final String key;
 
-        public PhotoUploadPayload(@NotNull final FluxtreamCapturePhotoStore.Operation operation, @NotNull final String photoStoreKey) {
+        @Nullable
+        @Expose
+        private final Long id;
+
+        public PhotoUploadResponsePayload(@NotNull final FluxtreamCapturePhotoStore.Operation operation, @Nullable final Long databaseRecordId, @NotNull final String photoStoreKey) {
+            this.id = databaseRecordId;
             this.operation = operation.getName();
             this.key = photoStoreKey;
         }
