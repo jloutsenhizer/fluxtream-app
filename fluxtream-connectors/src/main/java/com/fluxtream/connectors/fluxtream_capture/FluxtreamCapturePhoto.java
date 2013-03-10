@@ -21,6 +21,38 @@ import org.joda.time.DateTimeZone;
  * @author Chris Bartley (bartley@cmu.edu)
  */
 public final class FluxtreamCapturePhoto {
+
+    public static class PhotoUploadMetadata {
+        private double capture_time_secs_utc = -1;
+        @Nullable
+        private String comment;
+        @Nullable
+        private String tags;
+
+        public boolean isValid() {
+            return capture_time_secs_utc >= 0;
+        }
+
+        public long getCaptureTimeMillisUtc() {
+            // convert the capture time from seconds to milliseconds
+            return (long)(capture_time_secs_utc * 1000);
+        }
+
+        public double getCaptureTimeSecsUtc() {
+            return capture_time_secs_utc;
+        }
+
+        @Nullable
+        public String getComment() {
+            return comment;
+        }
+
+        @Nullable
+        public String getTags() {
+            return tags;
+        }
+    }
+
     private static final Logger LOG = Logger.getLogger(FluxtreamCapturePhoto.class);
 
     private static final int THUMBNAIL_0_MAX_SIDE_LENGTH_IN_PIXELS = 150;
@@ -84,7 +116,13 @@ public final class FluxtreamCapturePhoto {
     @Nullable
     private final Geolocation geolocation;
 
-    FluxtreamCapturePhoto(final long guestId, @NotNull final byte[] photoBytes, final long captureTimeMillisUtc) throws IllegalArgumentException, NoSuchAlgorithmException, IOException, FluxtreamCapturePhotoStore.UnsupportedImageFormatException {
+    @Nullable
+    private final String tags;
+
+    @Nullable
+    private final String comment;
+
+    FluxtreamCapturePhoto(final long guestId, @NotNull final byte[] photoBytes, @NotNull final PhotoUploadMetadata photoUploadMetadata) throws IllegalArgumentException, NoSuchAlgorithmException, IOException, FluxtreamCapturePhotoStore.UnsupportedImageFormatException {
 
         // Get the image type.  If this is null, then it's not a supported type.
         final ImageType tempImageType = ImageUtils.getImageType(photoBytes);
@@ -93,13 +131,15 @@ public final class FluxtreamCapturePhoto {
         }
         imageType = tempImageType;
 
-        if (captureTimeMillisUtc < 0) {
+        if (photoUploadMetadata.getCaptureTimeSecsUtc() < 0) {
             throw new IllegalArgumentException("The captureTimeMillisUtc must be non-negative");
         }
 
         this.guestId = guestId;
         this.photoBytes = photoBytes;
-        this.captureTimeMillisUtc = captureTimeMillisUtc;
+        this.captureTimeMillisUtc = photoUploadMetadata.getCaptureTimeMillisUtc();
+        this.tags = photoUploadMetadata.getTags();
+        this.comment = photoUploadMetadata.getComment();
 
         final DateTime captureTime = new DateTime(captureTimeMillisUtc, DateTimeZone.UTC);
         final String year = String.valueOf(captureTime.getYear());
@@ -226,5 +266,15 @@ public final class FluxtreamCapturePhoto {
     @Nullable
     public Geolocation getGeolocation() {
         return geolocation;
+    }
+
+    @Nullable
+    public String getTags() {
+        return tags;
+    }
+
+    @Nullable
+    public String getComment() {
+        return comment;
     }
 }
