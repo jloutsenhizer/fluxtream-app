@@ -23,6 +23,7 @@ import com.fluxtream.domain.PhotoFacetFinderStrategy;
 import com.fluxtream.services.GuestService;
 import com.fluxtream.services.PhotoService;
 import com.fluxtream.services.SettingsService;
+import com.fluxtream.utils.ConnectorUtils;
 import org.apache.log4j.Logger;
 import org.springframework.beans.factory.BeanFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -216,7 +217,7 @@ public class PhotoServiceImpl implements PhotoService {
             }
         }
         else {
-            final Connector connector = findConnectorByPrettyName(guestId, connectorPrettyName);
+            final Connector connector = ConnectorUtils.findConnectorByPrettyName(guestService, guestId, connectorPrettyName);
             if (connector != null) {
                 final ObjectType desiredObjectType = findObjectTypeByName(connector, objectTypeName);
 
@@ -241,21 +242,6 @@ public class PhotoServiceImpl implements PhotoService {
         }
 
         return photos;
-    }
-
-    /** Returns the Connector having the given pretty name.  Returns <code>null</code> if no such connector exists. */
-    private Connector findConnectorByPrettyName(final long guestId, final String connectorPrettyName) {
-        List<ApiKey> userKeys = guestService.getApiKeys(guestId);
-        for (ApiKey key : userKeys) {
-            if (key != null) {
-                final Connector connector = key.getConnector();
-                if (connector != null && connector.prettyName() != null && connector.prettyName().equals(connectorPrettyName)) {
-                    return connector;
-                }
-            }
-        }
-
-        return null;
     }
 
     /**

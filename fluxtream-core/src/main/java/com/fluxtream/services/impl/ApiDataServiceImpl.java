@@ -2,7 +2,6 @@ package com.fluxtream.services.impl;
 
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.Enumeration;
 import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
@@ -39,7 +38,6 @@ import com.fluxtream.thirdparty.helpers.WWOHelper;
 import com.fluxtream.utils.JPAUtils;
 import com.fluxtream.utils.Utils;
 import net.sf.json.JSONObject;
-import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.dom4j.Document;
 import org.joda.time.DateTimeZone;
@@ -311,6 +309,9 @@ public class ApiDataServiceImpl implements ApiDataService {
         return jpaDao.getFacetsAfter(guestId, connector, objectType, timeInMillis, desiredCount);
     }
 
+    public AbstractFacet getFacetById(long guestId, final Connector connector, final ObjectType objectType, final long facetId) {
+        return jpaDao.getFacetById(guestId, connector, objectType, facetId);
+    }
 
 	@Transactional(readOnly = false)
 	private void extractFacets(ApiData apiData, int objectTypes,
@@ -385,10 +386,7 @@ public class ApiDataServiceImpl implements ApiDataService {
 			logDuplicateFacet(facet);
 			return null;
 		} else {
-            if (facet.hasTags()) {
-                persistTags(facet);
-            }
-			em.persist(facet);
+            persistExistingFacet(facet);
             StringBuilder sb = new StringBuilder("module=updateQueue component=apiDataServiceImpl action=persistFacet")
                     .append(" connector=").append(Connector.fromValue(facet.api).getName())
                     .append(" objectType=").append(facet.objectType)
@@ -397,6 +395,15 @@ public class ApiDataServiceImpl implements ApiDataService {
 			return facet;
 		}
 	}
+
+    public void persistExistingFacet(final AbstractFacet facet) {
+        if (facet != null) {
+            if (facet.hasTags()) {
+                persistTags(facet);
+            }
+			em.persist(facet);
+        }
+    }
 
     String getTableName(Class<? extends AbstractFacet> cls) {
         String entityName = facetEntityNames.get(cls.getName());
@@ -452,9 +459,13 @@ public class ApiDataServiceImpl implements ApiDataService {
         assert (modified != null);
         //System.out.println("====== after modify, contained?: " + em.contains(modified));
         if (orig == null) {
-            // Persist the newly-created facet
-            em.persist(modified);
+            // Persist the newly-created facet (and its tags, if any)
+            persistExistingFacet(modified);
             //System.out.println("====== after persist, contained?: " + em.contains(modified));
+        } else {
+            if (modified.hasTags()) {
+                persistTags(modified);
+            }
         }
         assert(em.contains(modified));
         //System.out.println("========================================");

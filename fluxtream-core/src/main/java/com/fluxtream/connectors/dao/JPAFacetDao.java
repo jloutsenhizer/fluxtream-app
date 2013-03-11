@@ -2,8 +2,11 @@ package com.fluxtream.connectors.dao;
 
 import java.util.ArrayList;
 import java.util.List;
+import javax.persistence.Entity;
 import javax.persistence.EntityManager;
 import javax.persistence.PersistenceContext;
+import javax.persistence.Query;
+import javax.persistence.TypedQuery;
 import java.lang.reflect.Method;
 import org.apache.commons.lang.StringUtils;
 import org.apache.log4j.Logger;
@@ -99,6 +102,20 @@ public class JPAFacetDao implements FacetDao {
     @Override
     public List<AbstractFacet> getFacetsAfter(final long guestId, final Connector connector, final ObjectType objectType, final long timeInMillis, final int desiredCount) {
         return getFacets(guestId, connector, objectType, timeInMillis, desiredCount, "getFacetsAfter");
+    }
+
+    @Override
+    public AbstractFacet getFacetById(long guestId, final Connector connector, final ObjectType objectType, final long facetId) {
+        final Class<? extends AbstractFacet> facetClass = objectType.facetClass();
+        final Entity entity = facetClass.getAnnotation(Entity.class);
+        final TypedQuery<? extends AbstractFacet> query = em.createQuery("SELECT facet FROM " + entity.name() + " facet WHERE facet.id = " + facetId + " AND facet.guestId = " + guestId, facetClass);
+        query.setMaxResults(1);
+
+        final List resultList = query.getResultList();
+        if (resultList != null && resultList.size() > 0) {
+            return (AbstractFacet)resultList.get(0);
+        }
+        return null;
     }
 
     private AbstractFacet getFacet(final long guestId, final Connector connector, final ObjectType objectType, final String methodName) {

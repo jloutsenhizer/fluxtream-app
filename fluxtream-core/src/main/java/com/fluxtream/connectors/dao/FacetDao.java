@@ -20,6 +20,8 @@ public interface FacetDao {
 
     List<AbstractFacet> getFacetsAfter(long guestId, Connector connector, ObjectType objectType, long timeInMillis, int desiredCount);
 
+    AbstractFacet getFacetById(long guestId, final Connector connector, final ObjectType objectType, final long facetId);
+
     public void deleteAllFacets(Connector connector, long guestId);
 
     public void deleteAllFacets(Connector connector, ObjectType objectType, long guestId);
