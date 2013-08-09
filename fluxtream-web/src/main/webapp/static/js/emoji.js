@@ -179,7 +179,7 @@
             result:0xFE4E9
         },
         {
-            source:[0x1F1EF ,0x1F1F9],
+            source:[0x1F1EF ,0x1F1F5],
             result:0xFE4E9
         },
         {
@@ -220,7 +220,9 @@
         emojiRegex += emojiChar;
         if (i < li - 1)
             emojiRegex += "|";
-        emojiIDLookup[emojiChar] = emojiUnicodeEntries[i].toString(16);
+        var emojiId = emojiUnicodeEntries[i].toString(16);
+        while (emojiId.length < 4) emojiId = "0" + emojiId;
+        emojiIDLookup[emojiChar] = emojiId;
     }
 
     emojiRegex += ")"
@@ -245,4 +247,38 @@
             return ret;
         }
     }
+
+
+     if (typeof jQuery !== "undefined"){
+        (function($){
+            function getTextNodesIn(node) {
+                var textNodes = [], whitespace = /^\s*$/;
+
+                function getTextNodes(node) {
+                    if (node.nodeType == 3) {
+                        if (!whitespace.test(node.nodeValue)) {
+                            textNodes.push(node);
+                        }
+                    } else {
+                        for (var i = 0, len = node.childNodes.length; i < len; ++i) {
+                            getTextNodes(node.childNodes[i]);
+                        }
+                    }
+                }
+
+                getTextNodes(node);
+                return $(textNodes);
+            }
+
+
+            $.fn.emojify = function(){
+                return this.each(function(){
+                    getTextNodesIn(this).each(function(){
+                        $(this).replaceWith(emoji.parseEmoji($(this).text()));
+                    });
+                });
+            }
+
+        })(jQuery);
+     }
 })();
